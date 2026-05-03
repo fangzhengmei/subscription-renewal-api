@@ -399,3 +399,90 @@ class TestReminderServices:
         
         assert result is not None
         assert result.id == latest.id
+
+    def test_get_latest_reminder_created_time_vs_scheduled_time(self, test_db, sample_subscription):
+        now = datetime.utcnow()
+        
+        reminder_early_schedule = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="reminder_A",
+            scheduled_at=now + timedelta(days=1)
+        )
+        
+        reminder_late_schedule = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="reminder_B",
+            scheduled_at=now + timedelta(days=10)
+        )
+        
+        result = services.get_latest_reminder_for_subscription(test_db, sample_subscription.id)
+        
+        assert result is not None
+        assert result.id == reminder_late_schedule.id
+        assert result.reminder_type == "reminder_B"
+
+    def test_get_reminders_ordered_by_created_time(self, test_db, sample_subscription):
+        now = datetime.utcnow()
+        
+        reminder1 = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="first",
+            scheduled_at=now + timedelta(days=10)
+        )
+        reminder2 = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="second",
+            scheduled_at=now + timedelta(days=5)
+        )
+        reminder3 = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="third",
+            scheduled_at=now + timedelta(days=1)
+        )
+        
+        reminders = services.get_reminders_by_subscription(test_db, sample_subscription.id)
+        
+        assert len(reminders) == 3
+        assert reminders[0].id == reminder3.id
+        assert reminders[1].id == reminder2.id
+        assert reminders[2].id == reminder1.id
+
+    def test_reminder_status_flow_not_affected_by_sorting(self, test_db, sample_subscription):
+        now = datetime.utcnow()
+        
+        reminder_pending = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="test_reminder",
+            scheduled_at=now + timedelta(days=5)
+        )
+        
+        assert reminder_pending.status == ReminderStatus.PENDING
+        
+        sent_reminder = services.update_reminder_status(
+            test_db,
+            reminder_pending.id,
+            ReminderStatus.SENT
+        )
+        assert sent_reminder.status == ReminderStatus.SENT
+        assert sent_reminder.sent_at is not None
+        
+        new_reminder = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="new_reminder",
+            scheduled_at=now + timedelta(days=3)
+        )
+        
+        latest = services.get_latest_reminder_for_subscription(test_db, sample_subscription.id)
+        assert latest.id == new_reminder.id
+        assert latest.status == ReminderStatus.PENDING
+        
+        all_reminders = services.get_reminders_by_subscription(test_db, sample_subscription.id)
+        assert all_reminders[0].status == ReminderStatus.PENDING
+        assert all_reminders[1].status == ReminderStatus.SENT

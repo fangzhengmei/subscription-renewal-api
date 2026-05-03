@@ -192,7 +192,7 @@ def get_reminders_by_subscription(
 ) -> List[Reminder]:
     return db.query(Reminder).filter(
         Reminder.subscription_id == subscription_id
-    ).order_by(Reminder.scheduled_at.desc()).all()
+    ).order_by(Reminder.created_at.desc()).all()
 
 
 def update_reminder_status(
@@ -222,4 +222,4 @@ def get_latest_reminder_for_subscription(
 ) -> Optional[Reminder]:
     return db.query(Reminder).filter(
         Reminder.subscription_id == subscription_id
-    ).order_by(Reminder.scheduled_at.desc()).first()
+    ).order_by(Reminder.created_at.desc()).first()
