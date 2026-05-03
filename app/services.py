@@ -146,7 +146,7 @@ def get_upcoming_renewals(
     end_date = current_date + timedelta(days=days_ahead)
     
     subscriptions = db.query(Subscription).filter(
-        Subscription.is_active == 1,
+        Subscription.is_active.is_(True),
         Subscription.next_renewal_date >= current_date,
         Subscription.next_renewal_date <= end_date
     ).all()
@@ -208,8 +208,12 @@ def update_reminder_status(
     db_reminder.status = status
     if status == ReminderStatus.SENT:
         db_reminder.sent_at = datetime.utcnow()
-    if error_message:
-        db_reminder.error_message = error_message
+    
+    if status == ReminderStatus.FAILED:
+        if error_message:
+            db_reminder.error_message = error_message
+    else:
+        db_reminder.error_message = None
     
     db.commit()
     db.refresh(db_reminder)

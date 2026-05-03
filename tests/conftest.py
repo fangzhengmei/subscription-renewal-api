@@ -56,8 +56,8 @@ def sample_subscription_data():
         "cycle": "monthly",
         "start_date": now.isoformat(),
         "next_renewal_date": (now + timedelta(days=10)).isoformat(),
-        "is_active": 1,
-        "auto_renew": 1,
+        "is_active": True,
+        "auto_renew": True,
         "reminder_days_before": 7
     }
 
@@ -75,8 +75,8 @@ def sample_subscription(test_db):
         cycle=SubscriptionCycle.MONTHLY,
         start_date=now,
         next_renewal_date=now + timedelta(days=10),
-        is_active=1,
-        auto_renew=1,
+        is_active=True,
+        auto_renew=True,
         reminder_days_before=7
     )
     return services.create_subscription(test_db, subscription)

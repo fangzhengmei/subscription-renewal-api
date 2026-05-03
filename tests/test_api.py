@@ -111,8 +111,8 @@ class TestUpcomingRenewalsAPI:
             "cycle": "monthly",
             "start_date": now.isoformat(),
             "next_renewal_date": future_10_days.isoformat(),
-            "is_active": 1,
-            "auto_renew": 1,
+            "is_active": true,
+            "auto_renew": true,
             "reminder_days_before": 7
         }
         
@@ -142,8 +142,8 @@ class TestUpcomingRenewalsAPI:
             "cycle": "monthly",
             "start_date": now.isoformat(),
             "next_renewal_date": future_50_days.isoformat(),
-            "is_active": 1,
-            "auto_renew": 1,
+            "is_active": true,
+            "auto_renew": true,
             "reminder_days_before": 7
         }
         
@@ -272,3 +272,183 @@ class TestReminderAPI:
     def test_cancel_reminder_not_found(self, client):
         response = client.post("/api/reminders/9999/cancel")
         assert response.status_code == 404
+
+
+class TestSubscriptionBooleanFieldsAPI:
+    def test_create_subscription_boolean_defaults(self, client):
+        now = datetime.utcnow()
+        subscription_data = {
+            "user_id": "user_123",
+            "service_name": "Netflix",
+            "price": 29.99,
+            "currency": "CNY",
+            "cycle": "monthly",
+            "start_date": now.isoformat(),
+            "next_renewal_date": (now + timedelta(days=30)).isoformat(),
+        }
+        
+        response = client.post("/api/subscriptions/", json=subscription_data)
+        
+        assert response.status_code == 201
+        data = response.json()
+        assert data["is_active"] is True
+        assert data["auto_renew"] is True
+
+    def test_create_subscription_with_false_booleans(self, client):
+        now = datetime.utcnow()
+        subscription_data = {
+            "user_id": "user_123",
+            "service_name": "Netflix",
+            "price": 29.99,
+            "currency": "CNY",
+            "cycle": "monthly",
+            "start_date": now.isoformat(),
+            "next_renewal_date": (now + timedelta(days=30)).isoformat(),
+            "is_active": False,
+            "auto_renew": False
+        }
+        
+        response = client.post("/api/subscriptions/", json=subscription_data)
+        
+        assert response.status_code == 201
+        data = response.json()
+        assert data["is_active"] is False
+        assert data["auto_renew"] is False
+
+    def test_update_subscription_boolean_fields(self, client, sample_subscription):
+        update_data = {
+            "is_active": False,
+            "auto_renew": False
+        }
+        
+        response = client.put(
+            f"/api/subscriptions/{sample_subscription.id}",
+            json=update_data
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["is_active"] is False
+        assert data["auto_renew"] is False
+
+
+class TestReminderDaysBeforeValidationAPI:
+    def test_create_subscription_with_zero_reminder_days(self, client):
+        now = datetime.utcnow()
+        subscription_data = {
+            "user_id": "user_123",
+            "service_name": "Netflix",
+            "price": 29.99,
+            "currency": "CNY",
+            "cycle": "monthly",
+            "start_date": now.isoformat(),
+            "next_renewal_date": (now + timedelta(days=30)).isoformat(),
+            "reminder_days_before": 0
+        }
+        
+        response = client.post("/api/subscriptions/", json=subscription_data)
+        
+        assert response.status_code == 201
+        data = response.json()
+        assert data["reminder_days_before"] == 0
+
+    def test_create_subscription_with_negative_reminder_days(self, client):
+        now = datetime.utcnow()
+        subscription_data = {
+            "user_id": "user_123",
+            "service_name": "Netflix",
+            "price": 29.99,
+            "currency": "CNY",
+            "cycle": "monthly",
+            "start_date": now.isoformat(),
+            "next_renewal_date": (now + timedelta(days=30)).isoformat(),
+            "reminder_days_before": -1
+        }
+        
+        response = client.post("/api/subscriptions/", json=subscription_data)
+        
+        assert response.status_code == 422
+
+    def test_update_subscription_with_negative_reminder_days(self, client, sample_subscription):
+        update_data = {
+            "reminder_days_before": -5
+        }
+        
+        response = client.put(
+            f"/api/subscriptions/{sample_subscription.id}",
+            json=update_data
+        )
+        
+        assert response.status_code == 422
+
+
+class TestReminderStatusErrorMessageAPI:
+    def test_failed_reminder_has_error_message(self, client, sample_subscription, test_db):
+        import app.services as services
+        from datetime import timedelta
+        
+        reminder = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="test",
+            scheduled_at=datetime.utcnow() + timedelta(days=5)
+        )
+        
+        response = client.post(
+            f"/api/reminders/{reminder.id}/fail",
+            params={"error_message": "Network error"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "failed"
+        assert data["error_message"] == "Network error"
+
+    def test_failed_to_sent_clears_error_message(self, client, sample_subscription, test_db):
+        import app.services as services
+        from datetime import timedelta
+        
+        reminder = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="test",
+            scheduled_at=datetime.utcnow() + timedelta(days=5)
+        )
+        
+        client.post(
+            f"/api/reminders/{reminder.id}/fail",
+            params={"error_message": "Network error"}
+        )
+        
+        reminder_after = services.get_reminder(test_db, reminder.id)
+        assert reminder_after.error_message == "Network error"
+        
+        response = client.post(f"/api/reminders/{reminder.id}/send")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "sent"
+        assert data["error_message"] is None
+
+    def test_failed_to_cancelled_clears_error_message(self, client, sample_subscription, test_db):
+        import app.services as services
+        from datetime import timedelta
+        
+        reminder = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="test",
+            scheduled_at=datetime.utcnow() + timedelta(days=5)
+        )
+        
+        client.post(
+            f"/api/reminders/{reminder.id}/fail",
+            params={"error_message": "Network error"}
+        )
+        
+        response = client.post(f"/api/reminders/{reminder.id}/cancel")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "cancelled"
+        assert data["error_message"] is None

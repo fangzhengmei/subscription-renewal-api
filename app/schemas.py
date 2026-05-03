@@ -13,9 +13,9 @@ class SubscriptionBase(BaseModel):
     start_date: datetime
     next_renewal_date: datetime
     end_date: Optional[datetime] = None
-    is_active: int = 1
-    auto_renew: int = 1
-    reminder_days_before: int = 7
+    is_active: bool = True
+    auto_renew: bool = True
+    reminder_days_before: int = Field(7, ge=0, description="提醒天数，必须非负")
 
 
 class SubscriptionCreate(SubscriptionBase):
@@ -29,9 +29,9 @@ class SubscriptionUpdate(BaseModel):
     cycle: Optional[SubscriptionCycle] = None
     next_renewal_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
-    is_active: Optional[int] = None
-    auto_renew: Optional[int] = None
-    reminder_days_before: Optional[int] = None
+    is_active: Optional[bool] = None
+    auto_renew: Optional[bool] = None
+    reminder_days_before: Optional[int] = Field(None, ge=0, description="提醒天数，必须非负")
     last_reminder_sent_at: Optional[datetime] = None
 
 

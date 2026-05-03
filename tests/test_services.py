@@ -93,8 +93,8 @@ class TestSubscriptionCRUD:
             cycle=SubscriptionCycle.MONTHLY,
             start_date=now,
             next_renewal_date=now + timedelta(days=30),
-            is_active=1,
-            auto_renew=1,
+            is_active=True,
+            auto_renew=True,
             reminder_days_before=7
         )
         
@@ -126,8 +126,8 @@ class TestSubscriptionCRUD:
             cycle=SubscriptionCycle.MONTHLY,
             start_date=now,
             next_renewal_date=now + timedelta(days=30),
-            is_active=1,
-            auto_renew=1,
+            is_active=True,
+            auto_renew=True,
             reminder_days_before=7
         )
         sub2 = SubscriptionCreate(
@@ -138,8 +138,8 @@ class TestSubscriptionCRUD:
             cycle=SubscriptionCycle.MONTHLY,
             start_date=now,
             next_renewal_date=now + timedelta(days=15),
-            is_active=1,
-            auto_renew=1,
+            is_active=True,
+            auto_renew=True,
             reminder_days_before=7
         )
         
@@ -186,8 +186,8 @@ class TestRenewSubscription:
             cycle=SubscriptionCycle.MONTHLY,
             start_date=now,
             next_renewal_date=now + timedelta(days=30),
-            is_active=1,
-            auto_renew=1,
+            is_active=True,
+            auto_renew=True,
             reminder_days_before=7
         )
         
@@ -209,8 +209,8 @@ class TestRenewSubscription:
             cycle=SubscriptionCycle.MONTHLY,
             start_date=now,
             next_renewal_date=now + timedelta(days=30),
-            is_active=0,
-            auto_renew=1,
+            is_active=False,
+            auto_renew=True,
             reminder_days_before=7
         )
         
@@ -232,8 +232,8 @@ class TestUpcomingRenewals:
             cycle=SubscriptionCycle.MONTHLY,
             start_date=now,
             next_renewal_date=now + timedelta(days=10),
-            is_active=1,
-            auto_renew=1,
+            is_active=True,
+            auto_renew=True,
             reminder_days_before=7
         )
         sub2 = SubscriptionCreate(
@@ -244,8 +244,8 @@ class TestUpcomingRenewals:
             cycle=SubscriptionCycle.MONTHLY,
             start_date=now,
             next_renewal_date=now + timedelta(days=40),
-            is_active=1,
-            auto_renew=1,
+            is_active=True,
+            auto_renew=True,
             reminder_days_before=7
         )
         
@@ -268,8 +268,8 @@ class TestUpcomingRenewals:
             cycle=SubscriptionCycle.MONTHLY,
             start_date=now,
             next_renewal_date=now + timedelta(days=20),
-            is_active=1,
-            auto_renew=1,
+            is_active=True,
+            auto_renew=True,
             reminder_days_before=7
         )
         sub2 = SubscriptionCreate(
@@ -280,8 +280,8 @@ class TestUpcomingRenewals:
             cycle=SubscriptionCycle.MONTHLY,
             start_date=now,
             next_renewal_date=now + timedelta(days=10),
-            is_active=1,
-            auto_renew=1,
+            is_active=True,
+            auto_renew=True,
             reminder_days_before=7
         )
         
@@ -486,3 +486,218 @@ class TestReminderServices:
         all_reminders = services.get_reminders_by_subscription(test_db, sample_subscription.id)
         assert all_reminders[0].status == ReminderStatus.PENDING
         assert all_reminders[1].status == ReminderStatus.SENT
+
+
+class TestSubscriptionBooleanFields:
+    def test_subscription_boolean_fields_default(self, test_db):
+        now = datetime.utcnow()
+        subscription = SubscriptionCreate(
+            user_id="user_123",
+            service_name="Netflix",
+            price=29.99,
+            currency="CNY",
+            cycle=SubscriptionCycle.MONTHLY,
+            start_date=now,
+            next_renewal_date=now + timedelta(days=30),
+        )
+        
+        result = services.create_subscription(test_db, subscription)
+        
+        assert result.is_active is True
+        assert result.auto_renew is True
+
+    def test_subscription_inactive_boolean(self, test_db):
+        now = datetime.utcnow()
+        subscription = SubscriptionCreate(
+            user_id="user_123",
+            service_name="Netflix",
+            price=29.99,
+            currency="CNY",
+            cycle=SubscriptionCycle.MONTHLY,
+            start_date=now,
+            next_renewal_date=now + timedelta(days=30),
+            is_active=False,
+            auto_renew=False
+        )
+        
+        result = services.create_subscription(test_db, subscription)
+        
+        assert result.is_active is False
+        assert result.auto_renew is False
+
+    def test_update_subscription_boolean_fields(self, test_db, sample_subscription):
+        assert sample_subscription.is_active is True
+        assert sample_subscription.auto_renew is True
+        
+        update_data = SubscriptionUpdate(
+            is_active=False,
+            auto_renew=False
+        )
+        
+        result = services.update_subscription(test_db, sample_subscription.id, update_data)
+        
+        assert result.is_active is False
+        assert result.auto_renew is False
+
+    def test_inactive_subscription_excluded_from_upcoming(self, test_db):
+        now = datetime(2024, 1, 15, 10, 0, 0)
+        
+        active_sub = SubscriptionCreate(
+            user_id="user_123",
+            service_name="Netflix",
+            price=29.99,
+            currency="CNY",
+            cycle=SubscriptionCycle.MONTHLY,
+            start_date=now,
+            next_renewal_date=now + timedelta(days=10),
+            is_active=True,
+            auto_renew=True
+        )
+        inactive_sub = SubscriptionCreate(
+            user_id="user_123",
+            service_name="Spotify",
+            price=15.00,
+            currency="CNY",
+            cycle=SubscriptionCycle.MONTHLY,
+            start_date=now,
+            next_renewal_date=now + timedelta(days=5),
+            is_active=False,
+            auto_renew=True
+        )
+        
+        services.create_subscription(test_db, active_sub)
+        services.create_subscription(test_db, inactive_sub)
+        
+        upcoming = services.get_upcoming_renewals(test_db, days_ahead=30, current_date=now)
+        
+        assert len(upcoming) == 1
+        assert upcoming[0][0].service_name == "Netflix"
+
+
+class TestReminderDaysBeforeValidation:
+    def test_reminder_days_before_zero(self, test_db):
+        now = datetime.utcnow()
+        subscription = SubscriptionCreate(
+            user_id="user_123",
+            service_name="Netflix",
+            price=29.99,
+            currency="CNY",
+            cycle=SubscriptionCycle.MONTHLY,
+            start_date=now,
+            next_renewal_date=now + timedelta(days=30),
+            reminder_days_before=0
+        )
+        
+        result = services.create_subscription(test_db, subscription)
+        
+        assert result.reminder_days_before == 0
+
+    def test_update_reminder_days_before_zero(self, test_db, sample_subscription):
+        update_data = SubscriptionUpdate(
+            reminder_days_before=0
+        )
+        
+        result = services.update_subscription(test_db, sample_subscription.id, update_data)
+        
+        assert result.reminder_days_before == 0
+
+
+class TestReminderStatusErrorMessage:
+    def test_failed_status_sets_error_message(self, test_db, sample_subscription):
+        now = datetime.utcnow()
+        reminder = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="test",
+            scheduled_at=now + timedelta(days=5)
+        )
+        
+        assert reminder.error_message is None
+        
+        result = services.update_reminder_status(
+            test_db,
+            reminder.id,
+            ReminderStatus.FAILED,
+            error_message="Network error"
+        )
+        
+        assert result.status == ReminderStatus.FAILED
+        assert result.error_message == "Network error"
+
+    def test_failed_to_sent_clears_error_message(self, test_db, sample_subscription):
+        now = datetime.utcnow()
+        reminder = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="test",
+            scheduled_at=now + timedelta(days=5)
+        )
+        
+        services.update_reminder_status(
+            test_db,
+            reminder.id,
+            ReminderStatus.FAILED,
+            error_message="Network error"
+        )
+        
+        reminder_after_failed = services.get_reminder(test_db, reminder.id)
+        assert reminder_after_failed.error_message == "Network error"
+        
+        result = services.update_reminder_status(
+            test_db,
+            reminder.id,
+            ReminderStatus.SENT
+        )
+        
+        assert result.status == ReminderStatus.SENT
+        assert result.error_message is None
+
+    def test_failed_to_cancelled_clears_error_message(self, test_db, sample_subscription):
+        now = datetime.utcnow()
+        reminder = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="test",
+            scheduled_at=now + timedelta(days=5)
+        )
+        
+        services.update_reminder_status(
+            test_db,
+            reminder.id,
+            ReminderStatus.FAILED,
+            error_message="Network error"
+        )
+        
+        result = services.update_reminder_status(
+            test_db,
+            reminder.id,
+            ReminderStatus.CANCELLED
+        )
+        
+        assert result.status == ReminderStatus.CANCELLED
+        assert result.error_message is None
+
+    def test_sent_to_failed_sets_error_message(self, test_db, sample_subscription):
+        now = datetime.utcnow()
+        reminder = services.create_reminder(
+            test_db,
+            subscription_id=sample_subscription.id,
+            reminder_type="test",
+            scheduled_at=now + timedelta(days=5)
+        )
+        
+        services.update_reminder_status(
+            test_db,
+            reminder.id,
+            ReminderStatus.SENT
+        )
+        
+        result = services.update_reminder_status(
+            test_db,
+            reminder.id,
+            ReminderStatus.FAILED,
+            error_message="Retry failed"
+        )
+        
+        assert result.status == ReminderStatus.FAILED
+        assert result.error_message == "Retry failed"

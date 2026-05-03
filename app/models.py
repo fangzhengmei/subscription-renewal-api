@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from sqlalchemy import Column, Integer, String, DateTime, Enum as SQLEnum, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, DateTime, Enum as SQLEnum, ForeignKey, Float, Boolean
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -34,8 +34,8 @@ class Subscription(Base):
     next_renewal_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=True)
     
-    is_active = Column(Integer, default=1)
-    auto_renew = Column(Integer, default=1)
+    is_active = Column(Boolean, default=True)
+    auto_renew = Column(Boolean, default=True)
     
     reminder_days_before = Column(Integer, default=7)
     last_reminder_sent_at = Column(DateTime, nullable=True)
